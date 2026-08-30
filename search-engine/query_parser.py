@@ -1,5 +1,5 @@
 from tokenizer import Tokenizer, Token, TokenType, RESERVED_WORDS
-from query import AndQuery, NotQuery, OrQuery, Query, TermQuery
+from query import AndQuery, NotQuery, OrQuery, Query, TermQuery, PhraseQuery, PrefixQuery
 
 class Parser:
     # query -> AND binary_operation | OR binary_operation | NOT uniary_operation | Term
@@ -67,6 +67,26 @@ class Parser:
         return not_query, index
 
     @staticmethod
+    def _prefix(tokens: list[Token], index: int) -> tuple[PrefixQuery, int]:
+        query, index = Parser._unary_operation(tokens, index)
+
+        if not isinstance(query, TermQuery):
+            raise SyntaxError("Nesting queries with Prefix operation is not allowed")
+        
+        not_query: PrefixQuery = PrefixQuery(query.term)
+        return not_query, index
+
+    @staticmethod
+    def _phrase(tokens: list[Token], index: int) -> tuple[PhraseQuery, int]:
+        query, index = Parser._unary_operation(tokens, index)
+
+        if not isinstance(query, TermQuery):
+            raise SyntaxError("Nesting queries with Phrase operation is not allowed")
+        
+        not_query: PhraseQuery = PhraseQuery(query.term)
+        return not_query, index
+
+    @staticmethod
     def parse_query(tokens: list[Token], index: int) -> tuple[Query, int]:
         if index >= len(tokens):
             raise ValueError("Expected a query but reached end of input")
@@ -79,6 +99,10 @@ class Parser:
                 return Parser._or(tokens, index + 1)
             elif token.value == RESERVED_WORDS.NOT.value_str:
                 return Parser._not(tokens, index + 1)
+            elif token.value == RESERVED_WORDS.PREFIX.value_str:
+                return Parser._prefix(tokens, index + 1)
+            elif token.value == RESERVED_WORDS.PHRASE.value_str:
+                return Parser._phrase(tokens, index + 1)
             else:
                 raise ValueError(f"Unexpected Operator {token.value} in the query.")
         elif token.token_type == TokenType.TERM:

@@ -13,7 +13,10 @@ class QueryVisitor(Protocol):
     def visit_not(self, query: "NotQuery") -> set[str]:
             ...
 
-    def visit_prefix(self, query: "NotQuery") -> set[str]:
+    def visit_prefix(self, query: "PrefixQuery") -> set[str]:
+            ...
+
+    def visit_phrase(self, query: "PhraseQuery") -> set[str]:
             ...
 
 class Query:
@@ -54,3 +57,10 @@ class PrefixQuery(Query):
 
     def accept(self, visitor: QueryVisitor) -> set[str]:
         return visitor.visit_prefix(self)
+
+class PhraseQuery(Query):
+    def __init__(self, phrase: str):
+        self.phrase = phrase
+
+    def accept(self, visitor: QueryVisitor) -> set[str]:
+        return visitor.visit_phrase(self)

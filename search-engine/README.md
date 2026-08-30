@@ -446,3 +446,141 @@ Requirements:
 Phrase normalization, empty prefixes, repeated words, duplicate matches,
 prefix-query performance, result ordering, and other edge cases are your
 decisions.
+
+---
+
+## Level 5 — Segments, deletion, and merging
+
+Until now, every document has gone into one mutable index.
+
+Now split the index into smaller pieces called **segments**. New documents go
+into a writable buffer. Calling `flush()` turns that buffer into a read-only
+segment and starts a new buffer.
+
+Everything still lives in memory. Here, `flush()` does not mean writing to disk.
+
+```python
+engine.add("doc-1", "python search engine")
+engine.add("doc-2", "python web framework")
+engine.flush()
+
+engine.add("doc-3", "distributed search engine")
+```
+
+The engine now contains:
+
+```text
+SearchEngine
+ ├── Segment 1 — read-only
+ │    ├── doc-1
+ │    └── doc-2
+ └── Writable buffer
+      └── doc-3
+```
+
+Search should still find all three documents where appropriate, including
+documents that have not been flushed:
+
+```python
+engine.search("search")
+# ["doc-1", "doc-3"]
+```
+
+Call `flush()` again:
+
+```text
+SearchEngine
+ ├── Segment 1 — doc-1, doc-2
+ ├── Segment 2 — doc-3
+ └── Writable buffer — empty
+```
+
+Each segment contains its own index data. Existing segments are not modified
+when new documents arrive.
+
+---
+
+Now add document deletion:
+
+```python
+engine.delete("doc-1")
+
+engine.search("search")
+# ["doc-3"]
+```
+
+But `doc-1` lives inside a read-only segment. How can it disappear from search
+without rewriting that segment?
+
+Keep deletion information separately. This is often called a **tombstone**:
+the document's data is still stored, but searches treat it as deleted.
+
+Deletion should be visible immediately, including for documents still in the
+writable buffer.
+
+---
+
+Over time, repeated flushes create many segments. Searches then have more pieces
+to visit, and deleted documents still occupy space.
+
+Add a merge operation:
+
+```python
+engine.merge_segments()
+```
+
+Conceptually:
+
+```text
+Before:
+  Segment 1: doc-1 (deleted), doc-2
+  Segment 2: doc-3
+
+After:
+  New segment: doc-2, doc-3
+```
+
+Build a new segment from the live documents' index data, then replace the old
+segments. Do not modify the old segments in place or rebuild the index by
+re-analyzing stored document text.
+
+Search behavior should be the same before and after merging. Merging is
+maintenance, not a change to the searchable documents.
+
+---
+
+Requirements:
+
+- Add documents to a writable buffer.
+- `flush()` turns buffered data into an immutable segment.
+- Search across all segments and the current buffer.
+- `delete(document_id)` immediately hides a document from every query type.
+- Keep deletion state separate from immutable segment data.
+- `merge_segments()` combines existing segments and removes deleted documents
+  from the merged data.
+- Preserve term positions, phrase matching, prefix matching, and ranking.
+- Calculate ranking statistics across all live documents, not independently
+  for each segment. Flushing or merging alone must not change scores.
+- Keep the existing duplicate-ID rejection behavior for live documents.
+
+A possible API addition is:
+
+```python
+class SearchEngine:
+    def flush(self) -> None:
+        ...
+
+    def delete(self, document_id: str) -> None:
+        ...
+
+    def merge_segments(self) -> None:
+        ...
+```
+
+The segment model, deletion bookkeeping, missing-ID behavior, reuse of deleted
+IDs, empty operations, and other edge cases are your decisions.
+
+**Do not worry about disk persistence, threads, or background merging yet.**
+
+Add tests showing that query results survive flushes and merges, deleted
+documents stay hidden, and ranking remains consistent across segment boundaries.

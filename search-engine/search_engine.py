@@ -3,7 +3,7 @@ from text_analyzer import Analyzer
 from index import InvertedIndex
 from evaluator import QueryEvaluator
 from search_result import SearchResult
-from query import Query, TermQuery
+from query import Query, TermQuery, PrefixQuery, PhraseQuery
 from typing import Optional
 
 class SearchEngine:
@@ -31,3 +31,11 @@ class SearchEngine:
         limit: Optional[int]  = None,
     ) -> list[SearchResult]:
         return self._evaluator.evaluate_ranked(query, limit)
+
+    def prefix_search(self, prefix: str) -> list[str]:
+        query: Query = PrefixQuery(prefix)
+        return sorted(self._evaluator.evaluate(query))
+
+    def phrase_search(self, phrase: str) -> list[str]:
+        query: Query = PhraseQuery(phrase)
+        return sorted(self._evaluator.evaluate(query))

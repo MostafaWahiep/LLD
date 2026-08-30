@@ -30,13 +30,15 @@ class RESERVED_WORDS(Enum):
     AND = ("AND", TokenType.OPERATOR)
     OR  = ("OR",  TokenType.OPERATOR)
     NOT = ("NOT", TokenType.OPERATOR)
+    PREFIX = ("PREFIX", TokenType.OPERATOR)
+    PHRASE = ("PHRASE", TokenType.OPERATOR)
 
     def __init__(self, value_str: str, token_type: TokenType):
         self.value_str = value_str
         self.token_type = token_type
 
 TOKEN_SPECS = [
-    TokenSpec(TokenType.OPERATOR, r'\b(AND|OR|NOT)\b'),
+    TokenSpec(TokenType.OPERATOR, r'\b(AND|OR|NOT|PREFIX|PHRASE)\b'),
     TokenSpec(TokenType.TERM, r'"([^"]*)"', transform=lambda s: s[1:-1]),
     TokenSpec(TokenType.COMMA, r','),
     TokenSpec(TokenType.LEFT_PARENTHESIS, r'\('),
