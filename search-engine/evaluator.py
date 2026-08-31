@@ -1,4 +1,4 @@
-from index import InvertedIndex
+from index import Index
 from text_analyzer import Analyzer
 from query import AndQuery, NotQuery, OrQuery, Query, QueryVisitor, TermQuery, PrefixQuery, PhraseQuery
 from search_result import SearchResult
@@ -6,36 +6,37 @@ from math import log
 from typing import Optional
 from collections import defaultdict
 from posting import Posting
+from document import Document
+from document import DocumentRef
 
 class QueryEvaluator(QueryVisitor):
     def __init__(
         self,
-        index: InvertedIndex,
+        index: Index,
         analyzer: Analyzer,
     ):
         self._index = index
         self._analyzer = analyzer
 
-    def evaluate(self, query: Query) -> set[str]:
+    def evaluate(self, query: Query) -> set[DocumentRef]:
         return query.accept(self)
 
-    def visit_term(self, query: TermQuery) -> set[str]:
+    def visit_term(self, query: TermQuery) -> set[DocumentRef]:
         term: str = self._validate_single_term(query.term)
         return self._index.postings(term)
 
-    def visit_not(self, query: NotQuery) -> set[str]:
-        return set(self._index.document_ids()).difference(query.child.accept(self))
+    def visit_not(self, query: NotQuery) -> set[DocumentRef]:
+        return set(self._index.document_refs()).difference(query.child.accept(self))
         
-
-    def visit_and(self, query: AndQuery) -> set[str]:
+    def visit_and(self, query: AndQuery) -> set[DocumentRef]:
         results = [child.accept(self) for child in query.children]
         return set.intersection(*results)
 
-    def visit_or(self, query: OrQuery) -> set[str]:
+    def visit_or(self, query: OrQuery) -> set[DocumentRef]:
         results = [child.accept(self) for child in query.children]
         return set.union(*results)
 
-    def visit_prefix(self, query: PrefixQuery) -> set[str]:
+    def visit_prefix(self, query: PrefixQuery) -> set[DocumentRef]:
         term: str = self._validate_single_term(query.prefix)
         return self._index.prefix_search(term)
 
@@ -44,23 +45,23 @@ class QueryEvaluator(QueryVisitor):
             raise ValueError("limit cannot be negative")
 
         terms: list[str] = self._analyzer.analyze(query)
-        corpus_size = len(self._index.document_ids())
-        document_scores: dict[str, float] = defaultdict(float)
+        corpus_size = len(self._index.document_refs())
+        document_scores: dict[Document, float] = defaultdict(float)
 
         for term in terms:
             posting = self._index.get_posting(term)
             document_frequency = posting.document_frequency()
 
-            for document_id in posting.document_ids():
-                document_scores[document_id] += self.calculate_score(
-                    frequency=posting.frequency(document_id),
+            for document_ref in posting.document_refs():
+                document_scores[document_ref] += self.calculate_score(
+                    frequency=posting.frequency(document_ref),
                     num_docs_appearing=document_frequency,
                     corpus_size=corpus_size,
                 )
 
         results = [
-            SearchResult(document_id, score)
-            for document_id, score in document_scores.items()
+            SearchResult(document_ref.external_id, score)
+            for document_ref, score in document_scores.items()
         ]
 
         results.sort(key=lambda result: (-result.score, result.document_id))
@@ -91,20 +92,20 @@ class QueryEvaluator(QueryVisitor):
 
         return terms[0]
 
-    def visit_phrase(self, query: PhraseQuery) -> set[str]:
+    def visit_phrase(self, query: PhraseQuery) -> set[DocumentRef]:
         terms: list[str] = self._analyzer.analyze(query.phrase)
         postings: dict[str, Posting] = {}
 
         for term in terms:
             postings[term] = self._index.get_posting(term)
 
-        postings_sets = [posting.document_ids() for posting in postings.values()]
-        document_ids = set.intersection(*postings_sets) if postings_sets else set()
+        postings_sets: set[str] = [posting.document_refs() for posting in postings.values()]
+        document_refs: set[DocumentRef] = set.intersection(*postings_sets) if postings_sets else set()
 
         result: set[str] = set()
-        for document_id in document_ids:
-            if self._matches_phrase(terms, postings, document_id):
-                result.add(document_id)
+        for document_ref in document_refs:
+            if self._matches_phrase(terms, postings, document_ref):
+                result.add(document_ref)
 
         return result
 
@@ -112,15 +113,15 @@ class QueryEvaluator(QueryVisitor):
         self,
         terms: list[str],
         postings: dict[str, Posting],
-        document_id: str,
+        document_ref: DocumentRef,
     ) -> bool:
         positions = {}
         term_and_counts = []
 
         for offset, term in enumerate(terms):
             posting = postings[term]
-            positions[term] = posting.positions(document_id)
-            frequency = posting.frequency(document_id)
+            positions[term] = posting.positions(document_ref)
+            frequency = posting.frequency(document_ref)
 
             term_and_counts.append(
                 (term, frequency, offset)

@@ -1,6 +1,6 @@
 from query_parser import Parser
 from text_analyzer import Analyzer
-from index import InvertedIndex
+from index import Index
 from evaluator import QueryEvaluator
 from search_result import SearchResult
 from query import Query, TermQuery, PrefixQuery, PhraseQuery
@@ -10,7 +10,7 @@ class SearchEngine:
     def __init__(self, parser, analyzer, index, evaluator):
         self._parser: Parser = parser
         self._analyzer: Analyzer = analyzer
-        self._index: InvertedIndex = index
+        self._index: Index = index
         self._evaluator: QueryEvaluator = evaluator
     
     def add(self, document_id: str, text: str) -> None:
@@ -19,11 +19,11 @@ class SearchEngine:
 
     def search(self, term: str) -> list[str]:
         query: Query = TermQuery(term)
-        return sorted(self._evaluator.evaluate(query))
+        return self._query(query)
     
     def query(self, query_str: str) -> list[str]:
         query = self._parser.parse(query_str)
-        return sorted(self._evaluator.evaluate(query))
+        return self._query(query)
 
     def ranked_search(
         self,
@@ -34,8 +34,21 @@ class SearchEngine:
 
     def prefix_search(self, prefix: str) -> list[str]:
         query: Query = PrefixQuery(prefix)
-        return sorted(self._evaluator.evaluate(query))
-
+        return self._query(query)
+    
     def phrase_search(self, phrase: str) -> list[str]:
         query: Query = PhraseQuery(phrase)
-        return sorted(self._evaluator.evaluate(query))
+        return self._query(query)
+
+    def delete(self, document_id: str) -> None:
+        self._index.delete_document(document_id)
+
+    def flush(self) -> None:
+        self._index.flush()
+
+    def merge_segments(self) -> None:
+        self._index.merge_segments()
+    
+    def _query(self, query: Query) -> list[str]:
+        matches = self._evaluator.evaluate(query)
+        return sorted(ref.external_id for ref in matches)

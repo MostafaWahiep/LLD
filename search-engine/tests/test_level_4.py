@@ -1,12 +1,14 @@
 """Level 4: positions, phrase matching, trie prefixes, and composition."""
 
 from itertools import product
+from uuid import UUID
 import unittest
 from unittest.mock import patch
 
 from support import make_components, make_engine
 from config import Configuration
-from posting import Posting
+from document_ref import DocumentRef
+from posting import MutablePosting
 from query import AndQuery, NotQuery, OrQuery, PhraseQuery, PrefixQuery, TermQuery
 from trie_index import TrieIndex
 
@@ -158,33 +160,107 @@ class PrefixTests(unittest.TestCase):
                 self.assertEqual({t for t in terms if t.startswith(prefix)}, set(actual))
                 self.assertEqual(len(actual), len(set(actual)))
 
+    def test_long_term_prefix_does_not_require_recursion(self):
+        engine = make_engine()
+        long_term = "abc" + "x" * 1500
+        engine.add("long", long_term)
+        self.assertEqual(["long"], engine.prefix_search("abc"))
+        self.assertEqual(["long"], engine.search(long_term))
+
 
 class PositionTests(unittest.TestCase):
+    def test_bulk_positions_isolation_from_caller(self):
+        ref = DocumentRef(UUID(int=1), "doc")
+        supplied = {0, 2}
+        posting = MutablePosting("search")
+        posting.add_positions(ref, supplied)
+
+        supplied.add(4)
+        self.assertEqual({0, 2}, posting.positions(ref))
+        posting.add(ref, 6)
+        self.assertEqual({0, 2, 4}, supplied)
+
+    def test_combined_posting_isolation_from_sources(self):
+        _, index, _ = make_components()
+        first_ref = DocumentRef(UUID(int=1), "first")
+        second_ref = DocumentRef(UUID(int=2), "second")
+        first = MutablePosting("search")
+        second = MutablePosting("search")
+        first.add(first_ref, 0)
+        second.add(second_ref, 2)
+        combined = index._merge_postings("search", [first, second])
+
+        self.assertEqual({first_ref, second_ref}, combined.document_refs())
+        combined.add(first_ref, 4)
+        combined.add(second_ref, 5)
+        self.assertEqual({0}, first.positions(first_ref))
+        self.assertEqual({2}, second.positions(second_ref))
+
+        first.add(first_ref, 6)
+        second.add(second_ref, 7)
+        self.assertEqual({0, 4}, combined.positions(first_ref))
+        self.assertEqual({2, 5}, combined.positions(second_ref))
+
+    def test_get_posting_isolation_from_index(self):
+        engine, index, _ = make_components()
+        engine.add("doc", "search engine search")
+        combined = index.get_posting("search")
+        ref = next(iter(combined.document_refs()))
+        combined.add(ref, 100)
+
+        self.assertEqual({0, 2}, index.get_posting("search").positions(ref))
+        self.assertEqual(2, index.get_posting("search").frequency(ref))
+
     def test_index_records_zero_based_positions_and_frequency(self):
         engine, index, _ = make_components()
         engine.add("doc", "search engine search")
         posting = index.get_posting("search")
-        self.assertEqual({0, 2}, set(posting.positions("doc")))
-        self.assertEqual(2, posting.frequency("doc"))
+        refs = posting.document_refs()
+        self.assertEqual(1, len(refs))
+        ref = next(iter(refs))
+        self.assertIsInstance(ref, DocumentRef)
+        self.assertEqual("doc", ref.external_id)
+        self.assertEqual({0, 2}, set(posting.positions(ref)))
+        self.assertEqual(2, posting.frequency(ref))
         self.assertEqual(1, posting.document_frequency())
 
     def test_missing_position_lookup_does_not_modify_posting(self):
-        posting = Posting("search")
-        self.assertEqual(set(), set(posting.positions("missing")))
-        self.assertEqual(0, posting.frequency("missing"))
-        self.assertEqual(set(), posting.document_ids())
+        posting = MutablePosting("search")
+        missing = DocumentRef(UUID(int=1), "missing")
+        self.assertEqual(set(), set(posting.positions(missing)))
+        self.assertEqual(0, posting.frequency(missing))
+        self.assertEqual(set(), posting.document_refs())
 
     def test_returned_positions_cannot_corrupt_index(self):
-        posting = Posting("search")
-        posting.add("doc", 0)
-        positions = posting.positions("doc")
+        posting = MutablePosting("search")
+        ref = DocumentRef(UUID(int=1), "doc")
+        posting.add(ref, 0)
+        positions = posting.positions(ref)
         # Accept either an immutable collection or a defensive mutable copy.
         try:
             positions.clear()
         except (AttributeError, TypeError):
             pass
-        self.assertEqual({0}, set(posting.positions("doc")))
-        self.assertEqual(1, posting.frequency("doc"))
+        self.assertEqual({0}, set(posting.positions(ref)))
+        self.assertEqual(1, posting.frequency(ref))
+
+    def test_returned_document_refs_cannot_mutate_posting(self):
+        posting = MutablePosting("search")
+        ref = DocumentRef(UUID(int=1), "doc")
+        posting.add(ref, 0)
+        posting.document_refs().clear()
+        self.assertEqual({ref}, posting.document_refs())
+
+    def test_posting_identity_uses_internal_id(self):
+        # This is an identity-unit test, not a Level 5 deletion/reuse scenario.
+        first = DocumentRef(UUID(int=1), "same-external-id")
+        second = DocumentRef(UUID(int=2), "same-external-id")
+        posting = MutablePosting("search")
+        posting.add(first, 0)
+        posting.add(second, 3)
+        self.assertEqual(2, posting.document_frequency())
+        self.assertEqual({0}, posting.positions(first))
+        self.assertEqual({3}, posting.positions(second))
 
 
 class Level4CompositionTests(unittest.TestCase):
@@ -196,9 +272,39 @@ class Level4CompositionTests(unittest.TestCase):
 
     def test_query_objects_compose_through_visitor(self):
         query = AndQuery(PhraseQuery("distributed search"), NotQuery(PrefixQuery("legacy")))
-        self.assertEqual({"keep"}, self.evaluator.evaluate(query))
+        expected = self.evaluator.evaluate(TermQuery("engine"))
+        self.assertEqual(1, len(expected))
+        self.assertTrue(all(isinstance(ref, DocumentRef) for ref in expected))
+        self.assertEqual({"keep"}, {ref.external_id for ref in expected})
+        self.assertEqual(expected, self.evaluator.evaluate(query))
         query = OrQuery(PrefixQuery("searchi"), TermQuery("engine"))
-        self.assertEqual({"keep", "other"}, self.evaluator.evaluate(query))
+        expected = expected | self.evaluator.evaluate(TermQuery("searching"))
+        self.assertEqual({"keep", "other"}, {ref.external_id for ref in expected})
+        self.assertEqual(expected, self.evaluator.evaluate(query))
+
+    def test_evaluator_returns_refs_for_every_query_type(self):
+        cases = [
+            (TermQuery("engine"), {"keep"}),
+            (PrefixQuery("legacy"), {"exclude"}),
+            (PhraseQuery("distributed search"), {"keep", "exclude"}),
+            (NotQuery(TermQuery("legacycode")), {"keep", "other"}),
+        ]
+        for query, expected in cases:
+            with self.subTest(query=type(query).__name__):
+                matches = self.evaluator.evaluate(query)
+                self.assertIsInstance(matches, set)
+                self.assertTrue(all(isinstance(ref, DocumentRef) for ref in matches))
+                self.assertEqual(expected, {ref.external_id for ref in matches})
+
+    def test_phrase_and_prefix_reject_compound_arguments(self):
+        for source in (
+            'PREFIX(AND("search", "engine"))',
+            'PHRASE(NOT("search"))',
+            'PREFIX(PHRASE("search engine"))',
+            'PHRASE(PREFIX("sear"))',
+        ):
+            with self.subTest(source=source), self.assertRaises(SyntaxError):
+                self.engine.query(source)
 
     def test_public_boolean_phrase_composition(self):
         # Proposed syntax from the Level 4 exercise; intentionally tests the public API.

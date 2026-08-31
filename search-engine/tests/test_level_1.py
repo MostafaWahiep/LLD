@@ -65,9 +65,9 @@ class Level1Tests(unittest.TestCase):
         engine.add("doc", "python")
         engine.search("python").clear()
         index.postings("python").clear()
-        index.document_ids().clear()
+        index.external_document_ids().clear()
         self.assertEqual(["doc"], engine.search("python"))
-        self.assertEqual({"doc"}, index.document_ids())
+        self.assertEqual({"doc"}, index.external_document_ids())
 
 
 if __name__ == "__main__":

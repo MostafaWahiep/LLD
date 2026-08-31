@@ -1,13 +1,15 @@
 from search_engine import SearchEngine
 from query_parser import Parser
 from text_analyzer import TextAnalyzer
-from index import InvertedIndex
+from index import Index
 from evaluator import QueryEvaluator
 from trie_index import TrieIndex
+from buffer import Buffer
 
 
 def make_engine():
-    index = InvertedIndex(TrieIndex())
+    buffer = Buffer(TrieIndex())
+    index = Index(buffer)
     analyzer = TextAnalyzer()
     evaluator = QueryEvaluator(index, analyzer)
     return SearchEngine(Parser(), analyzer, index, evaluator)
@@ -25,6 +27,8 @@ def main():
     for result in engine.ranked_search("python search"):
         print(result)
 
+    engine.flush()
+
     engine.add("doc-4", "searching searchable content")
 
     print(engine.prefix_search("search"))
@@ -34,6 +38,11 @@ def main():
     print(engine.phrase_search("distributed search"))
     print(engine.phrase_search("distributed engine"))
 
+    engine.delete("doc-3")
+
+    engine.flush()
+    engine.merge_segments()
+    
     engine.add("doc-5", "search unrelated search engine")
     print(engine.phrase_search("search engine"))
     print(engine.query('PHRASE("search engine")'))

@@ -43,6 +43,53 @@ class TrieIndex:
 
         return terms
 
+    def merge(self, trie_index: "TrieIndex") -> None:
+        my_root = self._root
+        other_root = trie_index._root
+
+        stack: list[tuple[TrieNode, TrieNode]] = [(my_root, other_root)]
+
+        while stack:
+            cur_node, other_node = stack.pop()
+
+            if other_node.is_terminal:
+                cur_node.is_terminal = True
+
+            for char, child in other_node.children.items():
+                if char not in cur_node.children:
+                    cur_node.children[char] = TrieNode()
+                stack.append((cur_node.children[char], child))
+
+    def delete_terms(self, terms: list[str]) -> None:
+        for term in terms:
+            self.delete_term(term)
+
+    def delete_term(self, term: str) -> None:
+        node = self._root
+        path: list[tuple[TrieNode, str]] = []
+
+        for char in term:
+            child = node.children.get(char)
+            if child is None:
+                return
+
+            path.append((node, char))
+            node = child
+
+        if not node.is_terminal:
+            return
+
+        node.is_terminal = False
+
+        for parent, char in reversed(path):
+            child = parent.children.get(char)
+
+            if child.is_terminal or child.children:
+                return
+
+            del parent.children[char]
+
+
     def _get_suffixs_at(self, start_node: TrieNode) -> list[str]:
         suffixes: list[str] = []
         stack: list[tuple[TrieNode, str]] = [(start_node, "")]
