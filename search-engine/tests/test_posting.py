@@ -6,11 +6,15 @@ from unittest.mock import patch
 from uuid import UUID
 
 from support import make_components
-from buffer import Buffer
-from document import Document
-from document_ref import DocumentRef
-from posting import FrozenPosting, MutablePosting, Posting, PostingView, StoredPosting
-from trie_index import TrieIndex
+from search_engine.documents import Document, DocumentRef
+from search_engine.indexing.buffer import Buffer
+from search_engine.indexing.posting import (
+    FrozenPosting,
+    MutablePosting,
+    Posting,
+    PostingView,
+    StoredPosting,
+)
 
 
 class PostingTests(unittest.TestCase):
@@ -132,7 +136,7 @@ class PostingTests(unittest.TestCase):
 
 class PostingFreezeIntegrationTests(unittest.TestCase):
     def test_buffer_freeze_preserves_snapshot_and_detaches_new_writes(self):
-        buffer = Buffer(TrieIndex())
+        buffer = Buffer()
         ref = DocumentRef(UUID(int=1), "doc")
         buffer.add(Document(ref, "search engine"), ["search", "engine"])
         old_posting = buffer.get_posting("search")
@@ -151,7 +155,7 @@ class PostingFreezeIntegrationTests(unittest.TestCase):
         self.assertEqual(set(), segment.get_posting("missing").document_refs())
 
     def test_shared_buffer_lookup_uses_live_views_without_freezing(self):
-        buffer = Buffer(TrieIndex())
+        buffer = Buffer()
         first = DocumentRef(UUID(int=1), "first")
         second = DocumentRef(UUID(int=2), "second")
         buffer.add(Document(first, "search search"), ["search", "search"])
@@ -165,7 +169,7 @@ class PostingFreezeIntegrationTests(unittest.TestCase):
             self.assertEqual({first, second}, buffer.document_refs("search"))
 
     def test_shared_segment_lookup_returns_existing_frozen_posting(self):
-        buffer = Buffer(TrieIndex())
+        buffer = Buffer()
         ref = DocumentRef(UUID(int=1), "doc")
         buffer.add(Document(ref, "search"), ["search"])
         segment = buffer.freeze()
@@ -176,7 +180,7 @@ class PostingFreezeIntegrationTests(unittest.TestCase):
             self.assertEqual({ref}, segment.document_refs("search"))
 
     def test_missing_lookup_stays_empty_after_new_term_is_added(self):
-        buffer = Buffer(TrieIndex())
+        buffer = Buffer()
         missing = buffer.get_posting("search")
         self.assertIsInstance(missing, FrozenPosting)
         self.assertEqual(set(), missing.document_refs())

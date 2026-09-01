@@ -1,4 +1,4 @@
-from config import Configuration
+from search_engine.config import Configuration
 
 class TrieNode:
     def __init__(

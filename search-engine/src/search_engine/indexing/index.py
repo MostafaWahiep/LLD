@@ -1,15 +1,20 @@
-from posting import MutablePosting, Posting, StoredPosting
-from trie_index import TrieIndex
-from segment import Segment
-from buffer import Buffer
-from document import Document
-from document_ref import DocumentRef
 import uuid
+from typing import Callable
+
+from search_engine.documents import Document, DocumentRef
+from search_engine.indexing.buffer import Buffer
+from search_engine.indexing.posting import MutablePosting, Posting
+from search_engine.indexing.segment import Segment
+from search_engine.indexing.trie import TrieIndex
 
 class Index:
-    def __init__(self, buffer):
+    def __init__(
+        self,
+        trie_factory: Callable[[], TrieIndex] = TrieIndex,
+    ):
+        self._trie_factory = trie_factory
         self._segments: list[Segment] = []
-        self._buffer: Buffer = buffer
+        self._buffer = Buffer(self._trie_factory)
         self._live_documents: dict[str, DocumentRef] = {}
         self._deleted_documents: set[uuid.UUID] = set()
         
@@ -32,8 +37,9 @@ class Index:
             text=text
         )
 
-        self._live_documents[document_id] = document_ref
         self._buffer.add(document, terms)
+        self._live_documents[document_id] = document_ref
+        
 
     def postings(self, term: str) -> set[DocumentRef]:
         document_refs = self._buffer.document_refs(term)
@@ -81,13 +87,13 @@ class Index:
         
         postings: dict[str, MutablePosting] = {}
         documents: dict[uuid.UUID, Document] = {}
-        trie_index: TrieIndex = TrieIndex()
+        trie_index = self._trie_factory()
         to_be_cleaned_docs: set[uuid.UUID] = set()
         terms: set[str] = set()
 
         for segment in self._segments:
-            for posting in segment._postings.values():
-                term = posting.term
+            for term in segment.terms():
+                posting = segment.get_posting(term)
                 terms.add(term)
                 if posting.term not in postings:
                     postings[term] = MutablePosting(term)
@@ -102,12 +108,12 @@ class Index:
                 if postings[term].document_frequency() == 0:
                     postings.pop(term)
 
-            for document_id in segment._documents:
+            for document_id in segment.documents():
                 if document_id in self._deleted_documents:
                     to_be_cleaned_docs.add(document_id)
                     continue
 
-                documents[document_id] = segment._documents[document_id]
+                documents[document_id] = segment.get_document(document_id)
 
             trie_index.merge(segment._trie_index)
 

@@ -1,5 +1,13 @@
-from tokenizer import Tokenizer, Token, TokenType, RESERVED_WORDS
-from query import AndQuery, NotQuery, OrQuery, Query, TermQuery, PhraseQuery, PrefixQuery
+from search_engine.querying.queries import (
+    AndQuery,
+    NotQuery,
+    OrQuery,
+    PhraseQuery,
+    PrefixQuery,
+    Query,
+    TermQuery,
+)
+from search_engine.querying.tokenizer import RESERVED_WORDS, Token, Tokenizer, TokenType
 
 class Parser:
     # query -> AND binary_operation | OR binary_operation | NOT uniary_operation | Term

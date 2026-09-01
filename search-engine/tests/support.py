@@ -1,29 +1,13 @@
 """Shared test setup; production code is never modified by the tests."""
-
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from evaluator import QueryEvaluator
-from index import Index
-from buffer import Buffer
-from query_parser import Parser
-from search_engine import SearchEngine
-from text_analyzer import TextAnalyzer
-from trie_index import TrieIndex
-
-
-def make_components():
-    index = Index(Buffer(TrieIndex()))
-    analyzer = TextAnalyzer()
-    evaluator = QueryEvaluator(index, analyzer)
-    engine = SearchEngine(Parser(), analyzer, index, evaluator)
-    return engine, index, evaluator
-
-
-def make_engine():
-    return make_components()[0]
+PROJECT_SRC = Path(__file__).resolve().parents[1] / "src"
+if str(PROJECT_SRC) not in sys.path:
+    sys.path.insert(0, str(PROJECT_SRC))
+    
+from search_engine.factory import make_components, make_engine
 
 
 def populated_engine():

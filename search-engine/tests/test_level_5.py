@@ -5,9 +5,11 @@ import unittest
 from unittest.mock import patch
 
 from support import make_components, make_engine
-from config import Configuration
-from posting import FrozenPosting
-from text_analyzer import TextAnalyzer
+from search_engine.analysis import TextAnalyzer
+from search_engine.config import Configuration
+from search_engine.indexing.posting import FrozenPosting
+from search_engine.indexing.index import Index
+from search_engine.indexing.trie import TrieIndex
 
 
 def query_snapshot(engine):
@@ -35,6 +37,26 @@ class Level5MergeTests(unittest.TestCase):
         self.engine.flush()
         self.engine.add("b", "search engine python")
         self.engine.flush()
+
+    def test_trie_factory_is_shared_by_buffer_flushes_and_merging(self):
+        class CustomTrie(TrieIndex):
+            pass
+
+        index = Index(trie_factory=CustomTrie)
+        self.assertIsInstance(index._buffer._trie_index, CustomTrie)
+
+        index.add("a", "search", ["search"])
+        index.flush()
+        index.add("b", "engine", ["engine"])
+        index.flush()
+
+        self.assertTrue(
+            all(isinstance(segment._trie_index, CustomTrie) for segment in index._segments)
+        )
+        self.assertIsInstance(index._buffer._trie_index, CustomTrie)
+
+        index.merge_segments()
+        self.assertIsInstance(index._segments[0]._trie_index, CustomTrie)
 
     def test_merge_preserves_results_scores_and_positions(self):
         self.two_segments()
@@ -174,7 +196,10 @@ class Level5MergeTests(unittest.TestCase):
         buffer = self.index._buffer
         tombstones = set(self.index._deleted_documents)
         live_refs = self.index.document_refs()
-        for target in ("posting.MutablePosting.freeze", "index.Segment"):
+        for target in (
+            "search_engine.indexing.posting.MutablePosting.freeze",
+            "search_engine.indexing.index.Segment",
+        ):
             with self.subTest(target=target):
                 with patch(target, side_effect=RuntimeError("simulated failure")):
                     with self.assertRaisesRegex(RuntimeError, "simulated failure"):

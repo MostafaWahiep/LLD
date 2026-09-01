@@ -1,13 +1,22 @@
-from index import Index
-from text_analyzer import Analyzer
-from query import AndQuery, NotQuery, OrQuery, Query, QueryVisitor, TermQuery, PrefixQuery, PhraseQuery
-from search_result import SearchResult
 from math import log
 from typing import Optional
 from collections import defaultdict
-from posting import Posting
-from document import Document
-from document import DocumentRef
+
+from search_engine.analysis import Analyzer
+from search_engine.documents import Document, DocumentRef
+from search_engine.indexing.index import Index
+from search_engine.indexing.posting import Posting
+from search_engine.querying.queries import (
+    AndQuery,
+    NotQuery,
+    OrQuery,
+    PhraseQuery,
+    PrefixQuery,
+    Query,
+    QueryVisitor,
+    TermQuery,
+)
+from search_engine.results import SearchResult
 
 class QueryEvaluator(QueryVisitor):
     def __init__(

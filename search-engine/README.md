@@ -4,6 +4,18 @@ This project develops a small Lucene-style search engine one working level at a
 time. Each level adds requirements while preserving behavior from previous
 levels.
 
+## Running the project
+
+From this directory, run:
+
+```sh
+PYTHONPATH=src python3 -B -m unittest discover -s tests -v
+PYTHONPATH=src python3 -B examples/demo.py
+```
+
+You can also install the package in editable mode with
+`python3 -m pip install -e .`.
+
 Do not design later levels prematurely. Implement the simplest design that
 satisfies the current requirements, but keep responsibilities separated enough
 to change it safely.
@@ -584,3 +596,95 @@ IDs, empty operations, and other edge cases are your decisions.
 
 Add tests showing that query results survive flushes and merges, deleted
 documents stay hidden, and ranking remains consistent across segment boundaries.
+
+---
+
+## Level 6 — Persistence and crash-safe commits
+
+Everything disappears when the process exits. Now make committed index state
+survive a restart.
+
+Open an engine using a directory:
+
+```python
+engine = open_engine("./search-data")
+
+engine.add("doc-1", "python search engine")
+engine.add("doc-2", "distributed search")
+engine.commit()
+```
+
+Create a new engine using the same directory:
+
+```python
+reopened = open_engine("./search-data")
+
+reopened.search("search")
+# ["doc-1", "doc-2"]
+```
+
+The new engine must recover the committed segments, live document IDs, and
+deletion information. It should not need to analyze all stored document text
+again.
+
+`commit()` is the durability boundary. Changes made after the most recent
+successful commit are not guaranteed to survive a process crash.
+
+```python
+engine.delete("doc-1")
+engine.commit()
+
+reopened = open_engine("./search-data")
+reopened.search("search")
+# ["doc-2"]
+```
+
+Committing must be atomic from the reader's perspective. If the process fails
+partway through a commit, reopening the engine should observe either the
+previous successful commit or the complete new commit—never a mixture of both.
+
+The same rule applies when a merge replaces several old segments with a new
+one. A crash must not leave the engine with missing or partially replaced
+search data.
+
+---
+
+Requirements:
+
+- Store immutable segments on disk.
+- `commit()` makes the current searchable state durable, including buffered
+  documents and deletions.
+- Opening an existing index restores the most recent successful commit.
+- Preserve exact, boolean, ranked, phrase, and prefix query behavior after a
+  restart.
+- Preserve external-to-internal document identity across restarts.
+- Do not rebuild postings by re-analyzing document text during startup.
+- A failed or interrupted commit must not corrupt the previous committed state.
+- Merging and committing must not change query results or ranking scores.
+- Two index directories should remain independent.
+
+A possible API is:
+
+```python
+def open_engine(directory: str) -> SearchEngine:
+    ...
+
+
+class SearchEngine:
+    def commit(self) -> None:
+        ...
+
+    def close(self) -> None:
+        ...
+```
+
+The file format, directory layout, commit metadata, temporary files, startup
+recovery, obsolete segment cleanup, empty commits, and corruption handling are
+your design decisions.
+
+**Do not worry about multiple processes, concurrent readers and writers,
+memory-mapped files, compression, or a write-ahead log yet.**
+
+Add restart tests that use a temporary directory. Also simulate failures at
+different points during a commit and verify that reopening never exposes a
+partially committed index.

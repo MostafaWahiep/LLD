@@ -5,7 +5,7 @@ from math import log
 import unittest
 
 from support import make_engine, populated_engine
-from search_result import SearchResult
+from search_engine.results import SearchResult
 
 
 class Level3Tests(unittest.TestCase):

@@ -1,5 +1,5 @@
 from typing import Protocol
-from document_ref import DocumentRef
+from search_engine.documents import DocumentRef
 
 class QueryVisitor(Protocol):
     def visit_term(self, query: "TermQuery") -> set[DocumentRef]:

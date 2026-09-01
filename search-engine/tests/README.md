@@ -1,15 +1,15 @@
 # Search engine regression tests
 
-Run from the repository root:
+Run from the `search-engine` directory:
 
 ```sh
-python3 -B -m unittest discover -s search-engine/tests -v
+PYTHONPATH=src python3 -B -m unittest discover -s tests -v
 ```
 
 Run one level:
 
 ```sh
-python3 -B -m unittest discover -s search-engine/tests -p 'test_level_4.py' -v
+PYTHONPATH=src python3 -B -m unittest discover -s tests -p 'test_level_4.py' -v
 ```
 
 - `test_level_1.py`: exact lookup, document lifecycle, isolation.
@@ -22,7 +22,7 @@ python3 -B -m unittest discover -s search-engine/tests -p 'test_level_4.py' -v
   live views, and query preservation across mutable/frozen sources.
 - `support.py`: shared construction helpers (not production code).
 
-The fixtures construct `Index(Buffer(TrieIndex()))`. Public APIs still return
+The fixtures construct `Index()`. Public APIs still return
 external document IDs; posting and evaluator tests use `DocumentRef` values.
 Reference identity must use internal IDs, including when two references happen
 to have the same external label. Level 2 and Level 3 public behavior tests remain

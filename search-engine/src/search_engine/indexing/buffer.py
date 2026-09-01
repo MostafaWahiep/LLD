@@ -1,22 +1,24 @@
-from dataclasses import dataclass
-from posting import MutablePosting
-from trie_index import TrieIndex
-from document import Document
-from segment import Segment
-from segment_protocol import SegmentReads
+from search_engine.documents import Document
+from search_engine.indexing.posting import MutablePosting
+from search_engine.indexing.segment import Segment
+from search_engine.indexing.segment_reader import SegmentReads
+from search_engine.indexing.trie import TrieIndex
+
+from typing import Callable
 
 class Buffer(SegmentReads):
-    def __init__(self, trie_index: TrieIndex):
+    def __init__(self, trie_factory: Callable[[], TrieIndex] = TrieIndex):
+        self._trie_factory = trie_factory
         self._postings: dict[str, MutablePosting] = {}
         self._documents: dict[str, Document] = {}
-        self._trie_index: TrieIndex = trie_index
+        self._trie_index = self._trie_factory()
     
     def add(
         self,
         document: Document,
         terms: list[str],
     ) -> None:
-        if document.external_id in self._documents:
+        if document.internal_id() in self._documents:
             raise ValueError(f"Duplicate document ID: {document.external_id}")
 
         self._documents[document.internal_id()] = document
@@ -37,5 +39,5 @@ class Buffer(SegmentReads):
 
         self._postings = {}
         self._documents = {}
-        self._trie_index = TrieIndex()
+        self._trie_index = self._trie_factory()
         return segment

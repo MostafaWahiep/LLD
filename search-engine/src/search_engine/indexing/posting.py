@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import AbstractSet, Mapping, Optional, Protocol, runtime_checkable
 
-from document_ref import DocumentRef
+from search_engine.documents import DocumentRef
 
 
 @runtime_checkable

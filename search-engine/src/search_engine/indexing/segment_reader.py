@@ -1,8 +1,7 @@
 from typing import Mapping, Protocol, runtime_checkable
-from document_ref import DocumentRef
-from posting import Posting, FrozenPosting, StoredPosting
-from document import Document
-from trie_index import TrieIndex
+from search_engine.documents import Document, DocumentRef
+from search_engine.indexing.posting import FrozenPosting, Posting, StoredPosting
+from search_engine.indexing.trie import TrieIndex
 
 @runtime_checkable
 class SegmentProtocol(Protocol):
@@ -19,6 +18,15 @@ class SegmentProtocol(Protocol):
         ...
 
     def intenral_document_ids(self) -> set[str]:
+        ...
+
+    def terms(self) -> set[str]:
+        ...
+
+    def documents(self) -> set[Document]:
+        ...
+
+    def get_document(self, document_id: str) -> Document:
         ...
 
 class SegmentReads(SegmentProtocol):
@@ -50,3 +58,12 @@ class SegmentReads(SegmentProtocol):
 
     def intenral_document_ids(self) -> set[str]:
         return set(self._documents)
+
+    def terms(self) -> set[str]:
+        return set(self._postings)
+
+    def documents(self) -> set[Document]:
+        return set(self._documents)
+
+    def get_document(self, document_id: str) -> Document:
+        return self._documents.get(document_id)

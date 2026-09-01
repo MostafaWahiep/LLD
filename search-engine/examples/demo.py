@@ -1,18 +1,12 @@
-from search_engine import SearchEngine
-from query_parser import Parser
-from text_analyzer import TextAnalyzer
-from index import Index
-from evaluator import QueryEvaluator
-from trie_index import TrieIndex
-from buffer import Buffer
+import sys
+from pathlib import Path
 
 
-def make_engine():
-    buffer = Buffer(TrieIndex())
-    index = Index(buffer)
-    analyzer = TextAnalyzer()
-    evaluator = QueryEvaluator(index, analyzer)
-    return SearchEngine(Parser(), analyzer, index, evaluator)
+PROJECT_SRC = Path(__file__).resolve().parents[1] / "src"
+if str(PROJECT_SRC) not in sys.path:
+    sys.path.insert(0, str(PROJECT_SRC))
+
+from search_engine.factory import make_engine
 
 
 def main():

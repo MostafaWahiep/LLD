@@ -1,9 +1,9 @@
-from query_parser import Parser
-from text_analyzer import Analyzer
-from index import Index
-from evaluator import QueryEvaluator
-from search_result import SearchResult
-from query import Query, TermQuery, PrefixQuery, PhraseQuery
+from search_engine.analysis import Analyzer
+from search_engine.indexing.index import Index
+from search_engine.querying.evaluator import QueryEvaluator
+from search_engine.querying.parser import Parser
+from search_engine.querying.queries import PhraseQuery, PrefixQuery, Query, TermQuery
+from search_engine.results import SearchResult
 from typing import Optional
 
 class SearchEngine:

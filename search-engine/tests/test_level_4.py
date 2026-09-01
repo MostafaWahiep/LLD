@@ -6,11 +6,18 @@ import unittest
 from unittest.mock import patch
 
 from support import make_components, make_engine
-from config import Configuration
-from document_ref import DocumentRef
-from posting import MutablePosting
-from query import AndQuery, NotQuery, OrQuery, PhraseQuery, PrefixQuery, TermQuery
-from trie_index import TrieIndex
+from search_engine.config import Configuration
+from search_engine.documents import DocumentRef
+from search_engine.indexing.posting import MutablePosting
+from search_engine.indexing.trie import TrieIndex
+from search_engine.querying.queries import (
+    AndQuery,
+    NotQuery,
+    OrQuery,
+    PhraseQuery,
+    PrefixQuery,
+    TermQuery,
+)
 
 
 class PhraseTests(unittest.TestCase):
