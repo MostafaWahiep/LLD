@@ -4,10 +4,15 @@ from search_engine.querying.evaluator import QueryEvaluator
 from search_engine.querying.parser import Parser
 from search_engine.querying.queries import PhraseQuery, PrefixQuery, Query, TermQuery
 from search_engine.results import SearchResult
+from search_engine.indexing.codec import SegmentCodec, ManifestCodec
+from search_engine.indexing.manifest import Manifest
 from typing import Optional
+from pathlib import Path
+
 
 class SearchEngine:
-    def __init__(self, parser, analyzer, index, evaluator):
+    def __init__(self, path, parser, analyzer, index, evaluator):
+        self._path: Path = path
         self._parser: Parser = parser
         self._analyzer: Analyzer = analyzer
         self._index: Index = index
@@ -52,3 +57,14 @@ class SearchEngine:
     def _query(self, query: Query) -> list[str]:
         matches = self._evaluator.evaluate(query)
         return sorted(ref.external_id for ref in matches)
+
+    def commit(self) -> None:
+        self.flush()
+
+        for segment in self._index.segments():
+            SegmentCodec.write(segment, self._path)
+
+        ManifestCodec.write(
+            manifest=Manifest.from_index(self._index),
+            path=self._path
+        )

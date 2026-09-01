@@ -18,6 +18,8 @@ class Posting(Protocol):
 
     def document_frequency(self) -> int: ...
 
+    def positions_to_dict(self) -> dict: ...
+
 
 @runtime_checkable
 class StoredPosting(Posting, Protocol):
@@ -47,7 +49,7 @@ class PostingView(Posting):
         return self._source.document_frequency()
 
 
-class _PostingReads:
+class _PostingReads(Posting):
     """Shared reads over mutable or frozen position collections."""
 
     _positions: Mapping[DocumentRef, AbstractSet[int]]
@@ -63,6 +65,12 @@ class _PostingReads:
 
     def document_frequency(self) -> int:
         return len(self._positions)
+
+    def positions_to_dict(self) -> dict:
+        return {
+            str(ref.internal_id): list(positions)
+            for ref, positions in self._positions.items()
+        }
 
 
 class MutablePosting(_PostingReads, StoredPosting):

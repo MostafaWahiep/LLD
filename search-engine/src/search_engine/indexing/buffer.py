@@ -3,6 +3,7 @@ from search_engine.indexing.posting import MutablePosting
 from search_engine.indexing.segment import Segment
 from search_engine.indexing.segment_reader import SegmentReads
 from search_engine.indexing.trie import TrieIndex
+from uuid import UUID
 
 from typing import Callable
 
@@ -10,7 +11,7 @@ class Buffer(SegmentReads):
     def __init__(self, trie_factory: Callable[[], TrieIndex] = TrieIndex):
         self._trie_factory = trie_factory
         self._postings: dict[str, MutablePosting] = {}
-        self._documents: dict[str, Document] = {}
+        self._documents: dict[UUID, Document] = {}
         self._trie_index = self._trie_factory()
     
     def add(

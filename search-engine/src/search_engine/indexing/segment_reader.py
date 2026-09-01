@@ -3,6 +3,8 @@ from search_engine.documents import Document, DocumentRef
 from search_engine.indexing.posting import FrozenPosting, Posting, StoredPosting
 from search_engine.indexing.trie import TrieIndex
 
+from uuid import UUID
+
 @runtime_checkable
 class SegmentProtocol(Protocol):
     def document_refs(self, term: str) -> set[DocumentRef]:
@@ -31,8 +33,9 @@ class SegmentProtocol(Protocol):
 
 class SegmentReads(SegmentProtocol):
     _postings: Mapping[str, StoredPosting]
-    _documents: dict[str, Document]
+    _documents: dict[UUID, Document]
     _trie_index: TrieIndex
+    _id: str
 
     def document_refs(self, term: str) -> set[DocumentRef]:
         return self.get_posting(term).document_refs()
@@ -56,14 +59,14 @@ class SegmentReads(SegmentProtocol):
     def external_document_ids(self) -> set[str]:
         return set([doc.external_id() for doc in self._documents.values()])
 
-    def intenral_document_ids(self) -> set[str]:
+    def intenral_document_ids(self) -> set[UUID]:
         return set(self._documents)
 
     def terms(self) -> set[str]:
         return set(self._postings)
 
-    def documents(self) -> set[Document]:
+    def documents(self) -> set[UUID]:
         return set(self._documents)
 
-    def get_document(self, document_id: str) -> Document:
+    def get_document(self, document_id: UUID) -> Document:
         return self._documents.get(document_id)

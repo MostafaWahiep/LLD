@@ -1,5 +1,6 @@
 import uuid
-from typing import Callable
+from typing import Callable, Optional
+from typeid import TypeID
 
 from search_engine.documents import Document, DocumentRef
 from search_engine.indexing.buffer import Buffer
@@ -131,6 +132,30 @@ class Index:
         self._segments = [new_segment]
         self._deleted_documents = remaining_deleted
 
+    def live_documents_ids(self) -> dict[str, DocumentRef]:
+        return set(self._live_documents)
+
+    def get_internal_document_id(self, external_id: str) -> Optional[uuid.UUID]:
+        document_ref = self._live_documents.get(external_id)
+        if document_ref is None:
+            return None
+        return document_ref.internal_id
+
+    def get_document_ref(self, document_id: str) -> Optional[DocumentRef]:
+        return self._live_documents.get(document_id)
+
+    def deleted_documents(self) -> set[uuid.UUID]:
+        return self._deleted_documents
+
+    def segments(self) -> list[Segment]:
+        return self._segments
+
+    def segment_ids(self) -> list[TypeID]:
+        return [
+            segment._id
+            for segment in self._segments
+        ]
+
     def _merge_postings(self, term: str, postings: list[Posting]) -> MutablePosting:
         merged_posting = MutablePosting(term)
 
@@ -147,3 +172,43 @@ class Index:
             ref for ref in document_refs 
             if ref.internal_id not in self._deleted_documents
         }
+
+    @classmethod
+    def restore(
+        cls,
+        segments: list[Segment],
+        live_documents: dict[str, uuid.UUID],
+        deleted_documents: set[uuid.UUID],
+        trie_factory: Callable[[], TrieIndex] = TrieIndex
+    ) -> "Index":
+        index = cls(trie_factory)
+
+        refs_by_internal_id = {
+            document.internal_id(): document.document_ref
+            for segment in segments
+            for document_id in segment.documents()
+            for document in [segment.get_document(document_id)]
+        }
+
+        restored_live_documents = {}
+
+        for external_id, internal_id in live_documents.items():
+            document_ref = refs_by_internal_id.get(internal_id)
+
+            if document_ref is None:
+                raise ValueError(
+                    f"Manifest references missing document: {internal_id}"
+                )
+
+            if document_ref.external_id != external_id:
+                raise ValueError(
+                    f"Document ID mismatch for {internal_id}"
+                )
+
+            restored_live_documents[external_id] = document_ref
+
+        index._segments = list(segments)
+        index._live_documents = restored_live_documents
+        index._deleted_documents = set(deleted_documents)
+
+        return index
