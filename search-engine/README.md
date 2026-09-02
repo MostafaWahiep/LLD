@@ -688,3 +688,81 @@ memory-mapped files, compression, or a write-ahead log yet.**
 Add restart tests that use a temporary directory. Also simulate failures at
 different points during a commit and verify that reopening never exposes a
 partially committed index.
+
+---
+
+## Level 7 — Concurrent indexing and searching
+
+The engine currently assumes that one operation runs at a time. Now allow
+multiple threads to use the same engine safely.
+
+One thread may add documents while another searches:
+
+```python
+engine = open_engine("./search-data")
+
+# Thread A
+engine.add("doc-1", "python search engine")
+
+# Thread B
+engine.search("search")
+```
+
+Searching must never observe a partially indexed document. A query may run
+before or after the add becomes visible, but its result must correspond to one
+valid state of the index.
+
+The same applies when maintenance runs concurrently:
+
+```text
+Thread A: search
+Thread B: add and delete documents
+Thread C: flush, merge, or commit
+```
+
+A query should use one consistent view of the segments, writable buffer,
+live-document map, and tombstones. For example, ranking must not read postings
+from one state and calculate corpus size from another state.
+
+Immutable segments should help here: readers can retain an old segment while a
+writer publishes a new segment list. Existing readers finish with their old
+view; later readers receive the new one.
+
+---
+
+Requirements:
+
+- Support concurrent calls from multiple threads in one process.
+- A document must not become searchable until all its terms and positions are
+  indexed.
+- Deletion must become visible as one complete state change.
+- Each query must use a consistent index view for matching and ranking.
+- Flushing must not lose documents added around the buffer swap.
+- Merging must not remove segments or tombstones created after the merge began.
+- A commit persists one consistent snapshot. Changes outside that snapshot may
+  be included in the next commit.
+- Concurrent operations must not corrupt postings, tries, document maps,
+  segment lists, or manifest files.
+- Preserve all behavior and restart guarantees from previous levels.
+
+Keep the public API unchanged:
+
+```python
+engine.add(document_id, text)
+engine.delete(document_id)
+engine.search(term)
+engine.flush()
+engine.merge_segments()
+engine.commit()
+```
+
+Lock placement, snapshot representation, write serialization, merge retry
+behavior, and operation visibility are your design decisions.
+
+**Only support threads within one process. Do not worry about multiple writer
+processes, distributed locks, background scheduling, or lock-free data
+structures yet.**
+
+Write deterministic concurrency tests using barriers or events to control when
+operations pause and resume. Avoid tests that depend only on timing or
+`sleep()`.
