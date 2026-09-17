@@ -10,6 +10,7 @@ if str(PROJECT_SRC) not in sys.path:
 from search_engine.factory import make_components, make_engine
 
 
+
 def populated_engine():
     engine = make_engine()
     engine.add("doc-1", "python search search engine")
